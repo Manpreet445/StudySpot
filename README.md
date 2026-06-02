@@ -1,22 +1,45 @@
 # 📍 StudySpot
 
-A real-time, crowd-sourced study spot finder built with **React Native**, **Expo**, and **Firebase**. Users can discover nearby study locations on an interactive map, check in to report crowd levels, and view live status updates — all wrapped in a premium dark-mode UI.
+A cross-platform mobile app for discovering and reporting study spots in real time. Built with **React Native**, **Expo**, and **Firebase**. Map UI runs natively on Android/iOS via Google Maps and on Web via Leaflet — single codebase, three platforms.
 
 ![React Native](https://img.shields.io/badge/React_Native-0.83-61DAFB?logo=react&logoColor=white)
 ![Expo](https://img.shields.io/badge/Expo-55-000020?logo=expo&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-12-FFCA28?logo=firebase&logoColor=black)
 ![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Web-green)
+![Status](https://img.shields.io/badge/Status-Active%20Development-orange)
+
+**🚀 Status:** Core feature set shipped — real-time check-ins, cross-platform map, Firestore-backed crowd-level data. Auth flow, search/filter, and expanded spot dataset in development.
 
 ---
 
-## ✨ Features
+## ✨ What's Working
 
-- **Interactive Map** — Google Maps (native) / Leaflet (web) with custom dark-themed styling
-- **Real-Time Status** — Live crowd levels (Quiet / Moderate / Packed) powered by Firestore `onSnapshot`
-- **Check-In System** — Users report current busyness, instantly updating the map for everyone
-- **Search & Filter** — Find spots by name or filter by crowd level
-- **Cross-Platform** — Runs on Android, iOS, and Web from a single codebase
-- **Premium UI** — Glassmorphism cards, glow orbs, custom map pins, and Poppins typography
+- **Cross-platform map** — Google Maps native (Android/iOS), Leaflet web, dark-themed styling on both
+- **Custom design system** — Glassmorphism cards, glow accents, custom pins, Poppins typography
+- **Spot navigation** — Tap a pin → spot detail screen
+- **Live crowd-level data** — Spot locations defined in-app (3 sample locations for now); crowd-level state (Quiet / Moderate / Packed) lives in Firestore and updates across all connected clients in real time via `onSnapshot` listeners
+- **Real-time check-ins** — Users submit crowd levels; updates propagate live to all connected devices
+- **Auth-gated writes** — Firestore security rules deployed: public read, authenticated write
+- **Cross-platform routing** — React Navigation stack working on all three targets
+- **Environment hygiene** — No keys in source, `.env.example` template, `.env` gitignored
+
+---
+
+## 🛣️ Roadmap
+
+- [x] Expo + Firebase scaffolding
+- [x] Cross-platform map (native + web implementations)
+- [x] Spot pins rendered on map
+- [x] Custom dark-mode design system
+- [x] Spot detail screen navigation
+- [x] Check-in submission flow with Firestore persistence
+- [x] Real-time crowd-level updates via `onSnapshot`
+- [x] Cross-device live sync
+- [x] Production deployment of Firestore security rules
+- [ ] Migrate spot location data from in-app constants to Firestore
+- [ ] Add admin / seeding flow to populate more locations
+- [ ] Search & filter by crowd level
+- [ ] Authentication flow (anonymous → email)
 
 ---
 
@@ -46,7 +69,7 @@ A real-time, crowd-sourced study spot finder built with **React Native**, **Expo
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/StudySpot.git
+git clone https://github.com/Manpreet445/StudySpot.git
 cd StudySpot
 ```
 
@@ -57,8 +80,6 @@ npm install
 ```
 
 ### 3. Set up environment variables
-
-Copy the example environment file and fill in your credentials:
 
 ```bash
 cp .env.example .env
@@ -80,15 +101,7 @@ GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
 > - **Firebase keys** → [Firebase Console](https://console.firebase.google.com/) → Project Settings → General → Your apps → Web app config
 > - **Google Maps key** → [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials
 
-### 4. Seed the database (optional)
-
-Populate Firestore with sample study spots:
-
-```bash
-node seed.mjs
-```
-
-### 5. Start the app
+### 4. Start the app
 
 ```bash
 # Start the Expo dev server
@@ -111,9 +124,9 @@ StudySpot/
 ├── firebase/
 │   └── config.js           # Firebase init (reads from expo-constants)
 ├── screens/
-│   ├── MapScreen.js        # Native map with custom pins & filters
+│   ├── MapScreen.js        # Native map with custom pins
 │   ├── MapScreen.web.js    # Web map using Leaflet
-│   ├── SpotDetailScreen.js # Spot details with live status
+│   ├── SpotDetailScreen.js # Spot details with live crowd-level
 │   └── CheckInScreen.js    # Crowd-level check-in flow
 ├── components/
 │   └── SpotCard.js         # Reusable spot card component
@@ -121,7 +134,6 @@ StudySpot/
 │   └── theme.js            # Design tokens (colors, fonts)
 ├── firestore.rules         # Firestore security rules
 ├── firestore.indexes.json  # Firestore composite indexes
-├── seed.mjs                # Database seeder script
 ├── .env.example            # Template for required env vars
 └── .gitignore
 ```
@@ -132,7 +144,7 @@ StudySpot/
 
 - **No secrets in source code** — All API keys are loaded from environment variables via `.env`
 - **`.env` is gitignored** — Your credentials never touch version control
-- **Firestore rules** enforce read-only access for unauthenticated users and write access only for authenticated users
+- **Firestore rules enforce** read-only access for unauthenticated users and write access only for authenticated users
 - If you fork this project, **generate your own API keys** — never reuse someone else's
 
 ---
@@ -155,21 +167,10 @@ firebase deploy --only firestore:rules
 
 ---
 
-## 📱 Building for Production
-
-```bash
-# Install EAS CLI
-npm install -g eas-cli
-
-# Build for Android
-eas build --platform android
-
-# Build for iOS
-eas build --platform ios
-```
-
----
-
 ## 📄 License
 
 This project is for educational / portfolio purposes.
+
+---
+
+*Side project — exploring React Native + real-time data sync. For shipped production work, see [Recepie](https://github.com/Manpreet445/Recepie).*
