@@ -1,45 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TextInput, TouchableOpacity, ScrollView } from 'react-native';
-import * as Location from 'expo-location';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase/config';
 import { Ionicons, Feather } from '@expo/vector-icons';
-
-// Leaflet Imports
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { colors, fonts, statusConfig, filters, shadows } from '../constants/theme';
+import useSpots from '../hooks/useSpots';
+import useUserLocation from '../hooks/useUserLocation';
 
-// Velvet Void Status Colors
-const statusColor = {
-    quiet: '#22c55e',
-    moderate: '#f97316',
-    packed: '#ff8d90',
-};
-
-const statusLabel = {
-    quiet: 'Quiet',
-    moderate: 'Moderate',
-    packed: 'Packed',
-};
-
-const filters = ['All', 'Quiet', 'Moderate', 'Packed'];
-
-// Premium SVG Icons for Leaflet Web
+/**
+ * Generates a Leaflet DivIcon with an SVG marker themed to the spot's status.
+ * Each status type gets a distinct icon (book / coffee / people).
+ */
 const createCustomIcon = (status) => {
-    const color = statusColor[status];
+    const color = statusConfig[status].color;
 
-    const quietSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`;
-    const moderateSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>`;
-    const packedSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`;
-
-    const iconSvg = status === 'quiet' ? quietSvg : status === 'moderate' ? moderateSvg : packedSvg;
+    const svgIcons = {
+        quiet: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`,
+        moderate: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>`,
+        packed: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`,
+    };
 
     const html = `
     <div style="display: flex; flex-direction: column; align-items: center; pointer-events: none;">
-      <div style="background: #1a1919; border: 1px solid ${color}50; border-radius: 14px; padding: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+      <div style="background: ${colors.surface}; border: 1px solid ${color}50; border-radius: 14px; padding: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
         <div style="background: ${color}20; border-radius: 10px; padding: 6px; display: flex; justify-content: center; align-items: center;">
-          ${iconSvg}
+          ${svgIcons[status]}
         </div>
       </div>
       <div style="width: 2px; height: 16px; background: ${color}80;"></div>
@@ -56,49 +42,11 @@ const createCustomIcon = (status) => {
 };
 
 export default function MapScreenWeb({ navigation }) {
-    const [spots, setSpots] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const { spots, loading } = useSpots();
+    const { location } = useUserLocation();
     const [search, setSearch] = useState('');
     const [activeFilter, setActiveFilter] = useState('All');
     const [selectedSpot, setSelectedSpot] = useState(null);
-
-    const [region, setRegion] = useState({
-        latitude: 51.0447,
-        longitude: -114.0719,
-    });
-
-    useEffect(() => {
-        (async () => {
-            try {
-                const { status } = await Location.requestForegroundPermissionsAsync();
-                if (status === 'granted') {
-                    const loc = await Location.getCurrentPositionAsync({});
-                    setRegion({
-                        latitude: loc.coords.latitude,
-                        longitude: loc.coords.longitude,
-                    });
-                }
-            } catch (e) {
-                console.log('Location unavailable, sticking to Calgary default.');
-            }
-        })();
-    }, []);
-
-    useEffect(() => {
-        const unsubscribe = onSnapshot(
-            collection(db, 'spots'),
-            (snapshot) => {
-                const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-                setSpots(data);
-                setLoading(false);
-            },
-            (error) => {
-                console.error(error);
-                setLoading(false);
-            }
-        );
-        return () => unsubscribe();
-    }, []);
 
     const filteredSpots = spots.filter((spot) => {
         const matchesFilter = activeFilter === 'All' || spot.status === activeFilter.toLowerCase();
@@ -109,7 +57,7 @@ export default function MapScreenWeb({ navigation }) {
     if (loading) {
         return (
             <View style={styles.loader}>
-                <ActivityIndicator size="large" color="#ff8d90" />
+                <ActivityIndicator size="large" color={colors.accent} />
             </View>
         );
     }
@@ -125,9 +73,9 @@ export default function MapScreenWeb({ navigation }) {
 
             <View style={StyleSheet.absoluteFillObject}>
                 <MapContainer
-                    center={[region.latitude, region.longitude]}
+                    center={[location.latitude, location.longitude]}
                     zoom={13}
-                    style={{ height: '100%', width: '100%', backgroundColor: '#0e0e0e' }}
+                    style={{ height: '100%', width: '100%', backgroundColor: colors.background }}
                     onClick={() => setSelectedSpot(null)}
                 >
                     <TileLayer
@@ -149,22 +97,22 @@ export default function MapScreenWeb({ navigation }) {
                 </MapContainer>
             </View>
 
-            {/* Glassmorphism Header */}
+            {/* Header */}
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                    <Ionicons name="location-sharp" size={24} color="#ff8d90" />
+                    <Ionicons name="location-sharp" size={24} color={colors.accent} />
                     <Text style={styles.headerTitle}>StudySpot</Text>
                 </View>
             </View>
 
-            {/* Floating Search & Filters */}
+            {/* Search & Filters */}
             <View style={styles.searchContainer}>
                 <View style={styles.searchBar}>
-                    <Feather name="search" size={18} color="#adaaaa" />
+                    <Feather name="search" size={18} color={colors.textSecondary} />
                     <TextInput
                         style={styles.searchInput}
                         placeholder="Search for study spots..."
-                        placeholderTextColor="#adaaaa"
+                        placeholderTextColor={colors.textSecondary}
                         value={search}
                         onChangeText={setSearch}
                     />
@@ -184,7 +132,7 @@ export default function MapScreenWeb({ navigation }) {
                 </ScrollView>
             </View>
 
-            {/* Floating Selected Spot Card */}
+            {/* Selected Spot Card */}
             {selectedSpot && (
                 <View style={styles.floatingCard}>
                     <View style={styles.cardTop}>
@@ -192,17 +140,16 @@ export default function MapScreenWeb({ navigation }) {
                             <Text style={styles.cardName}>{selectedSpot.name}</Text>
                             <Text style={styles.cardDistance}>📍 Calgary, AB</Text>
                             <View style={styles.cardBadgeRow}>
-                                <View style={[styles.cardBadge, { backgroundColor: statusColor[selectedSpot.status] + '20', flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
-                                    {/* Premium Glowing Status Dot */}
-                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor[selectedSpot.status], shadowColor: statusColor[selectedSpot.status], shadowOpacity: 0.8, shadowRadius: 4 }} />
-                                    <Text style={[styles.cardBadgeText, { color: statusColor[selectedSpot.status] }]}>
-                                        {statusLabel[selectedSpot.status]}
+                                <View style={[styles.cardBadge, { backgroundColor: statusConfig[selectedSpot.status].color + '20', flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+                                    <View style={[styles.statusDot, { backgroundColor: statusConfig[selectedSpot.status].color, shadowColor: statusConfig[selectedSpot.status].color }]} />
+                                    <Text style={[styles.cardBadgeText, { color: statusConfig[selectedSpot.status].color }]}>
+                                        {statusConfig[selectedSpot.status].label}
                                     </Text>
                                 </View>
                             </View>
                         </View>
                         <TouchableOpacity onPress={() => setSelectedSpot(null)} style={styles.closeButton}>
-                            <Feather name="x" size={16} color="#adaaaa" />
+                            <Feather name="x" size={16} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
                     <TouchableOpacity
@@ -214,22 +161,22 @@ export default function MapScreenWeb({ navigation }) {
                 </View>
             )}
 
-            {/* Bottom Nav Bar */}
+            {/* Bottom Nav */}
             <View style={styles.bottomNav}>
                 <TouchableOpacity style={styles.navItem}>
-                    <Feather name="compass" size={22} color="#555" />
+                    <Feather name="compass" size={22} color={colors.textMuted} />
                     <Text style={styles.navLabel}>Explore</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.navItem}>
-                    <Feather name="bookmark" size={22} color="#555" />
+                    <Feather name="bookmark" size={22} color={colors.textMuted} />
                     <Text style={styles.navLabel}>Saved</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.navItem, styles.navItemActive]}>
-                    <Feather name="map-pin" size={22} color="#ff8d90" />
+                    <Feather name="map-pin" size={22} color={colors.accent} />
                     <Text style={[styles.navLabel, styles.navLabelActive]}>Check-In</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.navItem}>
-                    <Feather name="user" size={22} color="#555" />
+                    <Feather name="user" size={22} color={colors.textMuted} />
                     <Text style={styles.navLabel}>Profile</Text>
                 </TouchableOpacity>
             </View>
@@ -238,14 +185,14 @@ export default function MapScreenWeb({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#0e0e0e' },
-    loader: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0e0e0e' },
+    container: { flex: 1, backgroundColor: colors.background },
+    loader: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
     glowOrb: {
         position: 'absolute',
         width: 400,
         height: 400,
         borderRadius: 200,
-        backgroundColor: '#ff8d90',
+        backgroundColor: colors.accent,
         opacity: 0.06,
         top: '20%',
         left: '-10%',
@@ -266,7 +213,7 @@ const styles = StyleSheet.create({
         zIndex: 1000,
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    headerTitle: { fontSize: 24, fontFamily: 'Poppins_700Bold', color: '#ff8d90', letterSpacing: -0.5 },
+    headerTitle: { fontSize: 24, fontFamily: fonts.bold, color: colors.accent, letterSpacing: -0.5 },
 
     searchContainer: {
         position: 'absolute',
@@ -285,9 +232,9 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         gap: 10,
         borderWidth: 1,
-        borderColor: 'rgba(255,141,144,0.1)',
+        borderColor: colors.borderAccent,
     },
-    searchInput: { flex: 1, color: '#ffffff', fontSize: 14, fontFamily: 'Poppins_400Regular', outlineStyle: 'none' },
+    searchInput: { flex: 1, color: colors.textPrimary, fontSize: 14, fontFamily: fonts.regular, outlineStyle: 'none' },
     filterRow: { flexDirection: 'row' },
     filterPill: {
         paddingHorizontal: 20,
@@ -296,11 +243,11 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(26,25,25,0.95)',
         marginRight: 10,
         borderWidth: 1,
-        borderColor: 'rgba(73,72,71,0.3)',
+        borderColor: colors.borderSubtle,
     },
-    filterPillActive: { backgroundColor: '#ff8d90', borderColor: '#ff8d90' },
-    filterText: { color: '#adaaaa', fontSize: 13, fontFamily: 'Poppins_600SemiBold' },
-    filterTextActive: { color: '#640014' },
+    filterPillActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+    filterText: { color: colors.textSecondary, fontSize: 13, fontFamily: fonts.semibold },
+    filterTextActive: { color: colors.accentDark },
 
     floatingCard: {
         position: 'absolute',
@@ -312,28 +259,25 @@ const styles = StyleSheet.create({
         padding: 20,
         zIndex: 1000,
         borderWidth: 1,
-        borderColor: 'rgba(255,141,144,0.15)',
-        shadowColor: '#ff8d90',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        elevation: 10,
+        borderColor: colors.borderAccentMedium,
+        ...shadows.card,
     },
     cardTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
     cardInfo: { flex: 1 },
-    cardName: { fontSize: 20, fontFamily: 'Poppins_700Bold', color: '#ffffff', marginBottom: 4 },
-    cardDistance: { fontSize: 13, fontFamily: 'Poppins_400Regular', color: '#adaaaa', marginBottom: 12 },
+    cardName: { fontSize: 20, fontFamily: fonts.bold, color: colors.textPrimary, marginBottom: 4 },
+    cardDistance: { fontSize: 13, fontFamily: fonts.regular, color: colors.textSecondary, marginBottom: 12 },
     cardBadgeRow: { flexDirection: 'row' },
     cardBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-    cardBadgeText: { fontSize: 11, fontFamily: 'Poppins_700Bold', textTransform: 'uppercase', letterSpacing: 0.5 },
-    closeButton: { padding: 4, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, height: 32, width: 32, alignItems: 'center', justifyContent: 'center' },
+    cardBadgeText: { fontSize: 11, fontFamily: fonts.bold, textTransform: 'uppercase', letterSpacing: 0.5 },
+    statusDot: { width: 8, height: 8, borderRadius: 4, shadowOpacity: 0.8, shadowRadius: 4 },
+    closeButton: { padding: 4, backgroundColor: colors.surfaceHover, borderRadius: 12, height: 32, width: 32, alignItems: 'center', justifyContent: 'center' },
     checkinButton: {
-        backgroundColor: '#ff8d90',
+        backgroundColor: colors.accent,
         borderRadius: 9999,
         padding: 16,
         alignItems: 'center',
     },
-    checkinText: { color: '#640014', fontFamily: 'Poppins_700Bold', fontSize: 13, letterSpacing: 1 },
+    checkinText: { color: colors.accentDark, fontFamily: fonts.bold, fontSize: 13, letterSpacing: 1 },
 
     bottomNav: {
         position: 'absolute',
@@ -349,7 +293,7 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 30,
         borderTopRightRadius: 30,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.03)',
+        borderColor: colors.surfaceOverlay,
         zIndex: 1000,
     },
     navItem: { alignItems: 'center', gap: 4 },
@@ -359,6 +303,6 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         borderRadius: 9999,
     },
-    navLabel: { fontSize: 10, color: '#555', fontFamily: 'Poppins_700Bold', textTransform: 'uppercase', letterSpacing: 1 },
-    navLabelActive: { color: '#ff8d90' },
+    navLabel: { fontSize: 10, color: colors.textMuted, fontFamily: fonts.bold, textTransform: 'uppercase', letterSpacing: 1 },
+    navLabelActive: { color: colors.accent },
 });

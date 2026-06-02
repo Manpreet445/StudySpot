@@ -8,20 +8,40 @@ A cross-platform mobile app for discovering and reporting study spots in real ti
 ![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Web-green)
 ![Status](https://img.shields.io/badge/Status-Active%20Development-orange)
 
-**🚀 Status:** Core feature set shipped — real-time check-ins, cross-platform map, Firestore-backed crowd-level data. Auth flow, search/filter, and expanded spot dataset in development.
+**🚀 Status:** Core feature set shipped — real-time check-ins, cross-platform map with search & filtering, Firestore-backed crowd-level data syncing across devices.
 
 ---
 
 ## ✨ What's Working
 
 - **Cross-platform map** — Google Maps native (Android/iOS), Leaflet web, dark-themed styling on both
-- **Custom design system** — Glassmorphism cards, glow accents, custom pins, Poppins typography
-- **Spot navigation** — Tap a pin → spot detail screen
-- **Live crowd-level data** — Spot locations defined in-app (3 sample locations for now); crowd-level state (Quiet / Moderate / Packed) lives in Firestore and updates across all connected clients in real time via `onSnapshot` listeners
+- **Custom design system** — Centralized theme tokens, glassmorphism cards, glow accents, custom pins, Poppins typography
+- **Search & filter** — Search spots by name, filter by crowd level (Quiet / Moderate / Packed)
+- **Spot navigation** — Tap a pin → spot detail screen with live status
+- **Live crowd-level data** — Spot status lives in Firestore and updates across all connected clients in real time via `onSnapshot` listeners
 - **Real-time check-ins** — Users submit crowd levels; updates propagate live to all connected devices
-- **Auth-gated writes** — Firestore security rules deployed: public read, authenticated write
 - **Cross-platform routing** — React Navigation stack working on all three targets
 - **Environment hygiene** — No keys in source, `.env.example` template, `.env` gitignored
+- **Separation of concerns** — Custom hooks for data/location, data-access layer for Firestore, centralized design tokens
+
+---
+
+## 🏗️ Architecture
+
+```
+UI Components (screens/)
+        ↓ import
+Custom Hooks (hooks/)
+        ↓ import
+Data Access Layer (firebase/spots.js)
+        ↓ import
+Firebase SDK (firebase/config.js)
+```
+
+- **Screens** handle rendering and user interaction only
+- **Custom hooks** (`useSpots`, `useUserLocation`) manage subscriptions and state
+- **Data-access layer** (`firebase/spots.js`) encapsulates all Firestore operations with input validation
+- **Theme** (`constants/theme.js`) is the single source of truth for all design tokens
 
 ---
 
@@ -35,11 +55,13 @@ A cross-platform mobile app for discovering and reporting study spots in real ti
 - [x] Check-in submission flow with Firestore persistence
 - [x] Real-time crowd-level updates via `onSnapshot`
 - [x] Cross-device live sync
-- [x] Production deployment of Firestore security rules
-- [ ] Migrate spot location data from in-app constants to Firestore
-- [ ] Add admin / seeding flow to populate more locations
-- [ ] Search & filter by crowd level
+- [x] Search & filter by name and crowd level
+- [x] Centralized design system (theme tokens)
+- [x] Data-access layer + custom hooks
+- [ ] Migrate hardcoded amenities to Firestore per-spot data
 - [ ] Authentication flow (anonymous → email)
+- [ ] Auth-gated Firestore writes
+- [ ] Expanded spot dataset with admin seeding flow
 
 ---
 
@@ -119,22 +141,25 @@ npx expo start --web
 
 ```
 StudySpot/
-├── App.js                  # Root — navigation stack setup
-├── app.config.js           # Expo config (reads env vars)
-├── firebase/
-│   └── config.js           # Firebase init (reads from expo-constants)
-├── screens/
-│   ├── MapScreen.js        # Native map with custom pins
-│   ├── MapScreen.web.js    # Web map using Leaflet
-│   ├── SpotDetailScreen.js # Spot details with live crowd-level
-│   └── CheckInScreen.js    # Crowd-level check-in flow
-├── components/
-│   └── SpotCard.js         # Reusable spot card component
+├── App.js                    # Root — navigation stack setup
+├── app.config.js             # Expo config (reads env vars)
 ├── constants/
-│   └── theme.js            # Design tokens (colors, fonts)
-├── firestore.rules         # Firestore security rules
-├── firestore.indexes.json  # Firestore composite indexes
-├── .env.example            # Template for required env vars
+│   └── theme.js              # Design tokens: colors, fonts, status config, shadows, map style
+├── firebase/
+│   ├── config.js             # Firebase initialization
+│   └── spots.js              # Data-access layer: subscriptions, check-in writes
+├── hooks/
+│   ├── useSpots.js           # Real-time spots subscription hook
+│   └── useUserLocation.js    # Location permission + geolocation hook
+├── screens/
+│   ├── MapScreen.js          # Native map (Google Maps) with custom pins
+│   ├── MapScreen.web.js      # Web map (Leaflet) — platform-specific override
+│   ├── SpotDetailScreen.js   # Spot details with live crowd-level indicator
+│   └── CheckInScreen.js      # Crowd-level check-in flow with validation
+├── firestore.rules           # Firestore security rules (per-collection)
+├── firestore.indexes.json    # Firestore composite indexes
+├── seed.mjs                  # One-time Firestore seeding script
+├── .env.example              # Template for required env vars
 └── .gitignore
 ```
 
@@ -143,8 +168,9 @@ StudySpot/
 ## 🔒 Security Notes
 
 - **No secrets in source code** — All API keys are loaded from environment variables via `.env`
-- **`.env` is gitignored** — Your credentials never touch version control
-- **Firestore rules enforce** read-only access for unauthenticated users and write access only for authenticated users
+- **`.env` is gitignored** — Credentials never touch version control
+- **Per-collection Firestore rules** — `spots` are read + update only, `checkins` are read + create only, all other collections denied
+- **Auth not yet implemented** — Current rules allow public writes; auth-gated rules are planned (see Roadmap)
 - If you fork this project, **generate your own API keys** — never reuse someone else's
 
 ---
@@ -155,9 +181,11 @@ The included `firestore.rules` enforce:
 
 | Collection | Read | Write |
 |---|---|---|
-| `spots` | ✅ Public | 🔐 Auth required |
-| `checkins` | ✅ Public | 🔐 Auth required (create only) |
+| `spots` | ✅ Public | ✅ Public (update only) |
+| `checkins` | ✅ Public | ✅ Public (create only) |
 | Everything else | ❌ Denied | ❌ Denied |
+
+> **Note:** Auth-gated writes are on the roadmap. Current rules are intentionally permissive for development.
 
 Deploy rules to Firebase:
 

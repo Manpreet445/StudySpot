@@ -1,64 +1,55 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase/config';
 import { Feather } from '@expo/vector-icons';
+import { colors, fonts, statusConfig, shadows } from '../constants/theme';
+import { submitCheckIn } from '../firebase/spots';
 
 export default function CheckInScreen({ route, navigation }) {
     const { spot } = route.params;
-    // Tracks which button is loading to prevent spam taps
     const [loadingStatus, setLoadingStatus] = useState(null);
+    const [error, setError] = useState(null);
 
     const handleCheckIn = async (status) => {
-        if (loadingStatus) return; // Anti-spam: block double taps
+        if (loadingStatus) return;
         setLoadingStatus(status);
+        setError(null);
 
         try {
-            // 1. Log the check-in
-            await addDoc(collection(db, 'checkins'), {
-                spotId: spot.id,
-                spotName: spot.name,
-                status,
-                timestamp: serverTimestamp(),
-                userId: 'anonymous', // Mock user for the portfolio piece
-            });
-
-            // 2. Update the spot's live status AND add the lastUpdated timestamp
-            await updateDoc(doc(db, 'spots', spot.id), {
-                status,
-                lastUpdated: serverTimestamp()
-            });
-
-            // 3. Smooth UX: Navigate back instantly, no annoying alert popups
+            await submitCheckIn(spot.id, spot.name, status);
             navigation.navigate('Map');
         } catch (e) {
-            console.error(e);
+            console.error('Check-in failed:', e);
+            setError('Something went wrong. Please try again.');
             setLoadingStatus(null);
-            alert('Yikes, something went wrong. Try again!');
         }
     };
 
     return (
         <View style={styles.container}>
-            {/* Velvet Void Glow Orb */}
             <View style={styles.glowOrb} />
 
             <Text style={styles.title}>How busy is it at</Text>
             <Text style={styles.spotName}>{spot.name}?</Text>
 
+            {error && (
+                <View style={styles.errorBanner}>
+                    <Feather name="alert-triangle" size={16} color={colors.accent} />
+                    <Text style={styles.errorText}>{error}</Text>
+                </View>
+            )}
+
             <View style={styles.buttonsContainer}>
-                {/* Quiet Button */}
                 <TouchableOpacity
-                    style={[styles.button, { backgroundColor: '#22c55e' }]}
+                    style={[styles.button, { backgroundColor: statusConfig.quiet.color }]}
                     onPress={() => handleCheckIn('quiet')}
                     disabled={!!loadingStatus}
                 >
                     {loadingStatus === 'quiet' ? (
-                        <ActivityIndicator color="#ffffff" />
+                        <ActivityIndicator color={colors.textPrimary} />
                     ) : (
                         <>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <Feather name="user" size={20} color="#ffffff" />
+                            <View style={styles.buttonRow}>
+                                <Feather name="user" size={20} color={colors.textPrimary} />
                                 <Text style={styles.buttonText}>Quiet</Text>
                             </View>
                             <Text style={styles.buttonSub}>Plenty of seats available</Text>
@@ -66,18 +57,17 @@ export default function CheckInScreen({ route, navigation }) {
                     )}
                 </TouchableOpacity>
 
-                {/* Moderate Button */}
                 <TouchableOpacity
-                    style={[styles.button, { backgroundColor: '#f97316' }]}
+                    style={[styles.button, { backgroundColor: statusConfig.moderate.color }]}
                     onPress={() => handleCheckIn('moderate')}
                     disabled={!!loadingStatus}
                 >
                     {loadingStatus === 'moderate' ? (
-                        <ActivityIndicator color="#ffffff" />
+                        <ActivityIndicator color={colors.textPrimary} />
                     ) : (
                         <>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <Feather name="users" size={20} color="#ffffff" />
+                            <View style={styles.buttonRow}>
+                                <Feather name="users" size={20} color={colors.textPrimary} />
                                 <Text style={styles.buttonText}>Moderate</Text>
                             </View>
                             <Text style={styles.buttonSub}>Some seats available</Text>
@@ -85,19 +75,18 @@ export default function CheckInScreen({ route, navigation }) {
                     )}
                 </TouchableOpacity>
 
-                {/* Packed Button (Primary Crimson) */}
                 <TouchableOpacity
                     style={[styles.button, styles.packedButton]}
                     onPress={() => handleCheckIn('packed')}
                     disabled={!!loadingStatus}
                 >
                     {loadingStatus === 'packed' ? (
-                        <ActivityIndicator color="#640014" />
+                        <ActivityIndicator color={colors.accentDark} />
                     ) : (
                         <>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <Feather name="alert-circle" size={20} color="#640014" />
-                                <Text style={[styles.buttonText, { color: '#640014' }]}>Packed</Text>
+                            <View style={styles.buttonRow}>
+                                <Feather name="alert-circle" size={20} color={colors.accentDark} />
+                                <Text style={[styles.buttonText, { color: colors.accentDark }]}>Packed</Text>
                             </View>
                             <Text style={[styles.buttonSub, { color: 'rgba(100,0,20,0.7)' }]}>Hardly any seats left</Text>
                         </>
@@ -105,13 +94,13 @@ export default function CheckInScreen({ route, navigation }) {
                 </TouchableOpacity>
             </View>
 
-            {/* Cancel Button */}
             <TouchableOpacity
                 style={styles.backButton}
                 onPress={() => navigation.goBack()}
                 disabled={!!loadingStatus}
             >
-                <Text style={styles.backText}>✕ Cancel</Text>
+                <Feather name="x" size={16} color={colors.textSecondary} />
+                <Text style={styles.backText}>Cancel</Text>
             </TouchableOpacity>
         </View>
     );
@@ -120,7 +109,7 @@ export default function CheckInScreen({ route, navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0e0e0e',
+        backgroundColor: colors.background,
         alignItems: 'center',
         justifyContent: 'center',
         padding: 24,
@@ -130,26 +119,42 @@ const styles = StyleSheet.create({
         width: 320,
         height: 320,
         borderRadius: 160,
-        backgroundColor: '#ff8d90',
+        backgroundColor: colors.accent,
         opacity: 0.06,
         top: '25%',
         alignSelf: 'center',
     },
     title: {
         fontSize: 16,
-        color: '#adaaaa',
-        fontFamily: 'Poppins_600SemiBold',
+        color: colors.textSecondary,
+        fontFamily: fonts.semibold,
         marginBottom: 4,
         textTransform: 'uppercase',
         letterSpacing: 1,
     },
     spotName: {
         fontSize: 28,
-        color: '#ffffff',
-        fontFamily: 'Poppins_700Bold',
+        color: colors.textPrimary,
+        fontFamily: fonts.bold,
         textAlign: 'center',
         marginBottom: 48,
         letterSpacing: -0.5,
+    },
+    errorBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: colors.accent + '15',
+        borderRadius: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        marginBottom: 24,
+        width: '100%',
+    },
+    errorText: {
+        color: colors.accent,
+        fontFamily: fonts.semibold,
+        fontSize: 13,
     },
     buttonsContainer: {
         width: '100%',
@@ -162,34 +167,38 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: 80,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 5,
-        elevation: 6,
+        ...shadows.button,
     },
     packedButton: {
-        backgroundColor: '#ff8d90',
+        backgroundColor: colors.accent,
+    },
+    buttonRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
     buttonText: {
-        color: '#ffffff',
+        color: colors.textPrimary,
         fontSize: 18,
-        fontFamily: 'Poppins_700Bold',
+        fontFamily: fonts.bold,
         letterSpacing: 0.5,
     },
     buttonSub: {
         color: 'rgba(255,255,255,0.8)',
         fontSize: 13,
-        fontFamily: 'Poppins_400Regular',
+        fontFamily: fonts.regular,
         marginTop: 2,
     },
     backButton: {
         marginTop: 32,
-        padding: 12
+        padding: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
     },
     backText: {
-        color: '#adaaaa',
-        fontFamily: 'Poppins_600SemiBold',
-        fontSize: 15
+        color: colors.textSecondary,
+        fontFamily: fonts.semibold,
+        fontSize: 15,
     },
 });
